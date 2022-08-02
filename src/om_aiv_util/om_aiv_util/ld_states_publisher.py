@@ -1,8 +1,15 @@
 #!/usr/bin/env python
+from dis import dis
+from math import dist
+import string
+
+
+from numpy import float16, float32, float64
 import rclpy
 import sys
 import time
 from std_msgs.msg import String
+from std_msgs.msg import *
 from om_aiv_util.socket_listener import *
 from om_aiv_msg.msg import Status, Location
 from rclpy.node import Node
@@ -13,8 +20,9 @@ class LdStatePublisher(Node):
         super().__init__('ld_states_publisher_node')
         self.listener = listener
         self.status_pub = self.create_publisher(Status, "ldarcl_status", 10)
-        #self.laser_pub = self.create_publisher(String, "ldarcl_laser", 10)
-        #self.goals_pub = self.create_publisher(String, "ldarcl_all_goals", 10)
+        self.vel_pub = self.create_publisher(String, "ldarcl_velocity", 10)
+        self.dtg_pub = self.create_publisher(String, "ldarcl_distancetogoal", 10)
+        self.ttg_pub = self.create_publisher(String, "ldarcl_timetogoal", 10)
         #self.odom_pub = self.create_publisher(String, "ldarcl_odom", 10)
         #self.app_fault_query_pub = self.create_publisher(String, "ldarcl_application_fault_query", 10)
         #self.faults_get_pub = self.create_publisher(String, "ldarcl_faults_get", 10)
@@ -30,8 +38,8 @@ class LdStatePublisher(Node):
             self.listener.process_events(mask)
 
         self.pub_status()
-        #self.pub_laser()
-        #self.pub_goals()
+        self.pub_vel()
+        #self.pub_dtg()
         #self.pub_odometer()
         #self.pub_app_fault_query()
         #self.pub_faults_get()
@@ -48,15 +56,19 @@ class LdStatePublisher(Node):
             status_loc = self.listener.get_response(b"Location")
             status_loc_score = self.listener.get_response(b"LocalizationScore")
             status_temp = self.listener.get_response(b"Temperature")
-            
+            #status_speed = self.listener.get_response(b"TransVel")
+            #status_distance  = self.listener.get_response(b"Distance")
         except KeyError:
             pass
         else:
             status_msg.status = status_status[0].decode()
+    
             #status_msg.extended_status = status_ext[0].decode()
             status_msg.state_of_charge = float(status_batt[0])
             status_msg.localization_score = float(status_loc_score[0])
             status_msg.temperature = float(status_temp[0])
+            #status_msg.transvel = float(status_speed[0])
+            #status_msg.distance = float(status_distance[0])
             # Parse location values
             values = status_loc[0].split()
             if len(values) == 3:
@@ -78,30 +90,49 @@ class LdStatePublisher(Node):
     """
     
     """
-    # def pub_laser(self):
-    #     try:
-    #         scans = self.listener.get_response(b"RangeDeviceGetCurrent")
-    #     except KeyError:
-    #         pass
-    #     else:
-    #         #print(scans[0].decode())
-    #         scanstring = String()
-    #         scanstring.data = scans[0].decode()
-    #         self.laser_pub.publish(scanstring)
+    def pub_vel(self):
+        time1 = String()
+        speed1 = String()
+        distance1 = String()
+        try:        
+            vel_str = self.listener.get_response(b"TransVel")
+            dist_str= self.listener.get_response(b"Distance")
+        except KeyError:
+            pass
+        else:
+            speed1.data = vel_str[0]
+            distance1.data = dist_str[0]
+            if (float(vel_str[0]) > 1.0):
+                time_str = format(float(dist_str[0])/float(vel_str[0]),".2f")
+                time1.data = str(time_str)
+                
+            else:
+                time1.data = "0.0"
+            #s = distance1/speed1
+            #time1 = str(s)
+            #print(distance/speed)
+        finally:
+            self.vel_pub.publish(speed1)
+            self.dtg_pub.publish(distance1)
+            self.ttg_pub.publish(time1)
     # """
 
     # """
-    # def pub_goals(self):
-    #     try:
-    #         goals = self.listener.get_response(b"Goal")
-    #     except KeyError:
-    #         pass
-    #     else:
-    #         goalstring = String()
-    #         goalstring.data = (' '.join([bytevalue.decode() for bytevalue in goals]))
-    #         #goalstring.data = str(goals)
-    #         self.goals_pub.publish(goalstring)
-    #         #self.get_logger().info(goalstring.data)
+    def pub_dtg(self):
+        try:
+            dist_str= self.listener.get_response(b"Distance")
+            #distance = float32(dist_str[0])
+            print("dd",dist_str)
+        except KeyError:
+            pass
+        else:
+            querystring1 = String()
+            querystring1 = dist_str[0]
+            print("dis",querystring1)
+            #querystring1.data = (' '.join([bytevalue.decode() for bytevalue in query1]))
+            self.vel_pub.publish(querystring1)
+    # """
+            #self.get_logger().info(goalstring.data)
 
     # def pub_odometer(self):
     #     try:

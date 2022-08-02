@@ -1,4 +1,5 @@
 import io
+from turtle import distance
 import selectors2 as selectors
 import socket
 import traceback
@@ -23,8 +24,8 @@ class SocketListener(object):
         self._recv_buffer = b""
         self.lock = threading.Lock()
 
-        #self.goal_f = False
-        #self.app_fault_f = False
+        self.vel = False
+        self.dtg = False
         #self.faults_get_f = False
         #self.query_faults_f = False
 
@@ -79,7 +80,7 @@ class SocketListener(object):
             # Extract interested line from receive buffer.
             line = self._recv_buffer[:newline_char]
             self._recv_buffer = self._recv_buffer[newline_char+2:]
-
+            
             try:
                 colon = line.index(b':')
             except ValueError:
@@ -90,50 +91,54 @@ class SocketListener(object):
             else:
                 key = line[:colon]
                 value = line[colon+1:].strip()
+                if key != b"GetDataStoreFieldValues":
+                    self.responses[key] = [value]
+                elif key == b"GetDataStoreFieldValues":
+                    #print(value[:8])
+                    if value[:8] == b"TransVel":
+                        key = value[:8]
+                        value = value[9:].strip()
+                        #print("svalue", value)
+                        value = value.decode("utf-8")
+                        #print("ssvalue",str(value))
+                        self.responses[key] = [value]
+                    elif value[:8] == b"Distance":
+                        key = value[:8]
+                        value = value[17:].strip()
+                        value = value.decode("utf-8")
+                        #print("dvalue", value)
+                        self.responses[key] = [value]
                 #self.store(key, value)
-                self.responses[key] = [value]
+                
 
     # def store(self, key, value):
     #     #node = rclpy.create_node("testing")
-    # #     self.node.get_logger().info("store....")
-    #     if key == b"Goal":
-    #         self.node.get_logger().info("if g ")
-    #         if self.goal_f:
+    #     self.node.get_logger().info("store....")
+    #     print("key ", key)
+    #     if key == b"GetDataStoreFieldValues: TransVel":
+    #          self.node.get_logger().info("if g ")
+    #          if self.vel:
+    #              self.responses[key].append(value)
+    #              print("vel",value,key)
+    #              #node.get_logger().info(str(self.vel))
+    #          else:
+    #              self.responses[key] = [value]
+    #              self.vel = True
+    #              #node.get_logger().info(str(self.vel))
+    #     elif key == b"EndOfGetDataStoreFieldValues":
+    #          self.vel = False
+
+    #     elif key == b"GetDataStoreFieldValues: Distance_to_Goal":
+    #          # TODO: Account for values which contains spaces
+    #         if self.dtg:
     #             self.responses[key].append(value)
-    #             #node.get_logger().info(str(self.goal_f))
     #         else:
     #             self.responses[key] = [value]
-    #             self.goal_f = True
-    #             #node.get_logger().info(str(self.goal_f))
-
-    # #     elif key == b"End of goals":
-    # #         self.goal_f = False
-    # #     elif key == b"ApplicationFaultQuery":
-    # #         # TODO: Account for values which contains spaces
-    # #         if self.app_fault_f:
-    # #             self.responses[key].append(value)
-    # #         else:            #self.node.get_logger().info("key")
-            #self.node.get_logger().info(str(key))
-            #self.node.get_logger().info("value")
-            #self.node.get_logger().info(str(val))key].append(value)
-    # #         else:
-    # #             self.responses[key] = [value]
-    # #             self.faults_get_f = True
-    # #     elif key == b"End of FaultList":
-    # #         self.faults_get_f = False
-    # #     elif key == "RobotFaultQuery":
-    # #         # TODO: Account for values which contains spaces
-    # #         if self.query_faults_f:
-    # #             self.responses[key].append(value)
-    # #         else:
-    # #             self.responses[key] = [value]
-    # #             self.query_faults_f = True
-    # #     elif key == b"EndQueryFaults":
-    # #         self.query_faults_f = False
+    #             self.dtg = True
+    #     elif key == b"EndOfGetDataStoreFieldValues":
+    #         self.dtg = False
     #     else:
     #         self.responses[key] = [value]
-    #         self.node.get_logger().info("value ")
-    #         self.node.get_logger().info(str(value))
             
     """
     Retrieve the response associated with the given identifier integer.
@@ -150,6 +155,7 @@ class SocketListener(object):
         #self.node.get_logger().info(str(leng))
         try:
             val = self.responses[key]
+            #rint(val+";;;;"+key)
         except KeyError:
             raise
         else:
