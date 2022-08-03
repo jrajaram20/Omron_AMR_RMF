@@ -2,5 +2,6 @@
 Ros2 Driver for LD robots.
 Works with Foxy and Galactic
 
+Publishes -> robot status, transvel, distancetogoal, timetogoal
 
 
