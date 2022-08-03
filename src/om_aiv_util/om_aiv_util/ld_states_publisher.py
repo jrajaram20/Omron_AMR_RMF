@@ -102,7 +102,7 @@ class LdStatePublisher(Node):
         else:
             speed1.data = vel_str[0]
             distance1.data = dist_str[0]
-            if (float(vel_str[0]) > 1.0):
+            if float(vel_str[0]) > 20.0 and float(dist_str[0]) > 300.0:
                 time_str = format(float(dist_str[0])/float(vel_str[0]),".2f")
                 time1.data = str(time_str)
                 
