@@ -15,6 +15,9 @@ from pydantic import BaseModel
 from fastapi import FastAPI
 import uvicorn
 
+from std_msgs.msg import String
+from std_msgs.msg import *
+
 import rmf_adapter as adpt
 import rmf_adapter.vehicletraits as traits
 import rmf_adapter.geometry as geometry
@@ -45,7 +48,7 @@ class FleetManager(Node):
     def __init__(self, config, nav_graph):
         self.config = config
         self.fleet_name = self.config["rmf_fleet"]["name"]
-        
+        self.timetogoal = 0.0
         super().__init__(f'{self.fleet_name}_fleet_manager')
         
         profile = traits.Profile(geometry.make_final_convex_circle(
@@ -66,7 +69,8 @@ class FleetManager(Node):
         
         # Robot status subscription
         self.create_subscription(Status, 'ldarcl_status', self.robot_status_cb, 10)
-        
+        self.create_subscription(String, 'ldarcl_timetogoal', self.robot_ttg, 10)
+
         self.client = self.create_client(ArclApi, 'arcl_api_service')
         
         # Action client to navigate the robot
@@ -119,26 +123,28 @@ class FleetManager(Node):
             if not self.requested_destination:
                 return data
             
-            target_x = self.requested_destination['x']
-            target_y = self.requested_destination['y']
-            target_theta = self.requested_destination['theta']
+            # target_x = self.requested_destination['x']
+            # target_y = self.requested_destination['y']
+            # target_theta = self.requested_destination['theta']
             
-            position = self.get_robot_state(self.robots.get(robot_name), robot_name).get('position')
-            curr_x = position['x'] / 1000.0
-            curr_y = position['y'] / 1000.0
-            curr_theta = math.radians(position['theta'])
+            # position = self.get_robot_state(self.robots.get(robot_name), robot_name).get('position')
+            # curr_x = position['x'] / 1000.0
+            # curr_y = position['y'] / 1000.0
+            # curr_theta = math.radians(position['theta'])
             
-            dist_to_target = self.dist([target_x, target_y], [curr_x, curr_y])
-            angular_diff = abs(abs(curr_theta) - abs(target_theta))
+            # dist_to_target = self.dist([target_x, target_y], [curr_x, curr_y])
+            # angular_diff = abs(abs(curr_theta) - abs(target_theta))
             
-            if angular_diff > math.pi:
-                angular_diff -= 2 * math.pi
-            if angular_diff < -math.pi:
-                angular_diff += 2 * math.pi
+            # if angular_diff > math.pi:
+            #     angular_diff -= 2 * math.pi
+            # if angular_diff < -math.pi:
+            #     angular_diff += 2 * math.pi
                 
-            duration = int(dist_to_target / self.vehicle_traits.linear.nominal_velocity) + \
-                int(angular_diff / self.vehicle_traits.rotational.nominal_velocity)
+            # duration = int(dist_to_target / self.vehicle_traits.linear.nominal_velocity) + \
+            #     int(angular_diff / self.vehicle_traits.rotational.nominal_velocity)
             
+            duration = int(self.timetogoal)
+            print(duration)
             data['navigation_remaining_duration'] = duration
             data['success'] = True
             return data
@@ -184,6 +190,7 @@ class FleetManager(Node):
             data['battery'] = self.get_robot_state(self.robots.get(robot_name), robot_name).get('battery')
             data['battery'] /= 100.0
             data['success'] = True
+            #print("battery ", data)
             return data
         
     def robot_status_cb(self, msg):
@@ -197,7 +204,10 @@ class FleetManager(Node):
                                  msg.localization_score, msg.temperature)
         
         self.robots["amr1"] = robot_state
-        
+
+    def robot_ttg(self,msg1):
+        self.timetogoal = float(msg1.data)
+
     def get_robot_state(self, state: RobotState, robot_name: str):
         data = {}
         data['robot_name'] = robot_name
