@@ -1,0 +1,18 @@
+<?xml version='1.0' ?>
+
+<launch>
+  <arg name="output" default="screen"/>
+
+  <node pkg="om_fleet"
+        exec="fleet_manager"
+        args="--config_file $(var config_file) --nav_graph $(var nav_graph_file)"
+        output="both">
+  </node>
+
+  <node pkg="om_fleet"
+        exec="fleet_adapter"
+        args="--config_file $(var config_file) --nav_graph $(var nav_graph_file)"
+        output="both">
+  </node>       
+
+</launch>

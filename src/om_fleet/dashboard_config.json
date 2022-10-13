@@ -1,0 +1,24 @@
+{
+    "world_name" : "Omron ",  
+    "valid_task": ["Loop"],
+    "task": {
+      "Delivery": {
+      },
+      "Loop": {
+        "places": [
+          "four",
+          "one",
+          "two",
+          "three"
+        ]
+      },
+      "Clean": {
+      },
+      "Station": {
+      },
+      "Patrol": {
+      },
+      "Charging": {
+      }
+    }
+  }
