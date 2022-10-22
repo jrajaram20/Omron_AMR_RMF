@@ -2,3 +2,5 @@
 float64 x
 float64 y
 float64 theta
+string level_name
+string map_name
