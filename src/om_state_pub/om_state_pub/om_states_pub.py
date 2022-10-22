@@ -12,7 +12,7 @@ import time
 from std_msgs.msg import String
 from std_msgs.msg import *
 from om_state_pub.ld_arcl import *
-from om_aiv_msg.msg import Status, Location, RobotState
+from om_aiv_msg.msg import Location, Status#, Locationrmf,  Robotstate
 from rclpy.node import Node
 
 
@@ -21,12 +21,14 @@ class LdStatePublisher(Node):
         super().__init__('ld_param_node')
         self.listener = listener
         self.robotname = _robotname
-
-        #self.status_pub = self.create_publisher(Status, "state", 10)
-        self.status_pub = self.create_publisher(RobotState, "robot_state", 10)
+        self.levelname = "L1"
+        self.mapname = "loglab"
+        self.timetogoal = 0
+        self.status_pub = self.create_publisher(Status, "Rstate", 10)
+        #self.status_pub = self.create_publisher(Robotstate, "Rstate", 10)
         #self.vel_pub = self.create_publisher(String, self.robot_name+"_velocity", 10)
         #self.dtg_pub = self.create_publisher(String, self.robot_name+"_distancetogoal", 10)
-        self.ttg_pub = self.create_publisher(String, "timetogoal", 10)
+        #self.ttg_pub = self.create_publisher(String, "timetogoal", 10)
         #self.batt_pub = self.create_publisher(String, self.listener.robot_name+"_battery", 10)
         self.timer_period = 0.5
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
@@ -38,9 +40,11 @@ class LdStatePublisher(Node):
 
     
     def pub_status(self):
-        #status_msg = Status()
-        status_msg = RobotState()
+        status_msg = Status()
         loc_msg = Location()
+        #status_msg = Robotstate()
+        #loc_msg = Locationrmf()
+        self.timetogoal = self._timetogoal()
         try:
             status_name = self.robotname
             status_status = self.listener.get_response("ModeStatus")
@@ -48,7 +52,9 @@ class LdStatePublisher(Node):
             status_locx = self.listener.get_response("RobotX")
             status_locy = self.listener.get_response("RobotY")
             status_locth = self.listener.get_response("RobotTh")
-            
+            status_loclevname = self.levelname
+            status_locmapname = self.mapname
+            status_timetogoal = self.timetogoal 
             #status_speed = self.listener.get_response("TransVel")
             #status_distance  = self.listener.get_response(b"Distance")
         except KeyError:
@@ -58,19 +64,25 @@ class LdStatePublisher(Node):
                 status_msg.name = status_name
                 status_msg.status = status_status[0]
                 status_msg.state_of_charge = float(status_batt[0])
+                status_msg.time_to_goal = float(self.timetogoal)
                 #status_msg.transvel = float(status_speed[0])
                 #status_msg.distance = float(status_distance[0])
                 # Parse location values
                 loc_msg.x = float(status_locx[0])
                 loc_msg.y = float(status_locy[0])
                 loc_msg.theta = float(status_locth[0])
+                loc_msg.level_name = self.levelname
+                loc_msg.map_name = self.mapname
             except ValueError:
                 status_msg.name = ""
                 status_msg.status = "NA"
                 status_msg.state_of_charge = -100.0
+                status_msg.time_to_goal = 0.0
                 loc_msg.x = 0
                 loc_msg.y = 0
                 loc_msg.theta = 0
+                loc_msg.level_name = self.levelname
+                loc_msg.map_name = self.mapname
                 print("Value error with location coordinates. Setting them to zeroes.")
                 pass
             else:
@@ -80,11 +92,27 @@ class LdStatePublisher(Node):
     """
     
     """
+    def _timetogoal(self):
+        time_str = 0.0
+        try:        
+            vel_str = self.listener.get_response("TransVel")
+            dist_str= self.listener.get_response("Distance_to_goal")
+        except KeyError:
+            pass
+        else:
+            if float(vel_str[0]) > 20.0 and float(dist_str[0]) > 300.0:
+                time_str = format(float(dist_str[0])/float(vel_str[0]),".2f")
+                return time_str
+            else:
+                return time_str
+        finally:
+            return time_str
+
     def pub_vel(self):
         time1 = String()
         speed1 = String()
         distance1 = String()
-        loc_msg = Location()
+        #loc_msg = Location()
         try:        
             vel_str = self.listener.get_response("TransVel")
             print(vel_str)
@@ -103,8 +131,9 @@ class LdStatePublisher(Node):
             else:
                 time1.data = "0.0"
         finally:
-            self.dtg_pub.publish(distance1)
-            self.ttg_pub.publish(time1)
+            # self.dtg_pub.publish(distance1)
+            # self.ttg_pub.publish(time1)
+            return time1.data
     # """
 
     # """

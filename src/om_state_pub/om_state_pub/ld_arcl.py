@@ -180,7 +180,7 @@ class ConnectSocket(object):
     def task(self):
         while True:
             self.sendmsg("dsfv RobotX"+"\n"+"dsfv RobotY"+"\n"+"dsfv RobotTh"+"\n"+"dsfv modestatus"+"\n"+"dsfv transvel"+"\n"+"dsfv distance_to_goal"+"\n"+"dsfv batterystateofcharge")
-            time.sleep(0.5)
+            time.sleep(1.0)
             r = ""
             r = self.rcvmsg()
             self.sort_data(r)
@@ -202,6 +202,6 @@ class ConnectSocket(object):
 
 
 if __name__ == "__main__":
-    c = ConnectSocket()
+    c = ConnectSocket('node', '192.168.56.10', 7171, "omron")
     c.main1()
 
