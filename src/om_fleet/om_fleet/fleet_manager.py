@@ -44,7 +44,7 @@ from pyproj import Transformer
 
 import socketio
 
-from om_aiv_msg.msg import Status, Location
+from om_aiv_msg.msg import Location, Status#, Locationrmf, Robotstate
 from om_aiv_msg.action import Action
 from om_aiv_msg.srv import ArclApi
 
@@ -104,14 +104,14 @@ class FleetManager(Node):
         self.config = config
         self.fleet_name = self.config["rmf_fleet"]["name"]
 
-        # self.gps = False
-        # self.offset = [0, 0]
-        # if 'reference_coordinates' in self.config and \
-        #         'offset' in self.config['reference_coordinates']:
-        #     assert len(self.config['reference_coordinates']['offset']) > 1, \
-        #         ('Please ensure that the offset provided is valid.')
+        self.gps = False
+        self.offset = [0, 0]
+        if 'reference_coordinates' in self.config and \
+                'offset' in self.config['reference_coordinates']:
+            assert len(self.config['reference_coordinates']['offset']) > 1, \
+                ('Please ensure that the offset provided is valid.')
         #     self.gps = True
-        #     self.offset = self.config['reference_coordinates']['offset']
+            self.offset = self.config['reference_coordinates']['offset']
 
         super().__init__(f'{self.fleet_name}_fleet_manager')
 
@@ -158,24 +158,24 @@ class FleetManager(Node):
         #             time.sleep(1)
 
         self.create_subscription(
-            RobotState,
-            'robot_state',
+            Status,
+            'Rstate',
             self.robot_state_cb,
-            100)
+            10)
          # Action client to navigate the robot
         self._action_client = ActionClient(self, Action, 'action_server')
         
-        # transient_qos = QoSProfile(
-        #     history=History.KEEP_LAST,
-        #     depth=1,
-        #     reliability=Reliability.RELIABLE,
-        #     durability=Durability.TRANSIENT_LOCAL)
+        transient_qos = QoSProfile(
+            history=History.KEEP_LAST,
+            depth=1,
+            reliability=Reliability.RELIABLE,
+            durability=Durability.TRANSIENT_LOCAL)
 
-        # self.create_subscription(
-        #     DockSummary,
-        #     'dock_summary',
-        #     self.dock_summary_cb,
-        #     qos_profile=transient_qos)
+        self.create_subscription(
+            DockSummary,
+            'dock_summary',
+            self.dock_summary_cb,
+            qos_profile=transient_qos)
 
         # self.path_pub = self.create_publisher(
         #     PathRequest,
@@ -210,28 +210,30 @@ class FleetManager(Node):
                   response_model=Response)
         async def navigate(robot_name: str, cmd_id: int, dest: Request):
             response = {'success': False, 'msg': ''}
+            #self.get_logger().info(f"navigate:::::::::::::::::::, [{dest}]")
+            #self.get_logger().info(f"data in fm,,,,,,,,,,,,,,,,, [{dest.data}]")
             if (robot_name not in self.robots or len(dest.destination) < 1):
                 return response
-
             robot = self.robots[robot_name]
-
             target_x = dest.destination['x']
             target_y = dest.destination['y']
             target_yaw = dest.destination['yaw']
-            target_map = dest.map_name
+            target_map = "L1"
             target_speed_limit = dest.speed_limit
 
-            target_x -= self.offset[0]
-            target_y -= self.offset[1]
+            #-------------------------------------------------------------------------------------
+            # target_x -= self.offset[0]
+            # target_y -= self.offset[1]
+            #-------------------------------------------------------------------------------------
 
             t = self.get_clock().now().to_msg()
 
             path_request = PathRequest()
             robot = self.robots[robot_name]
-            cur_x = robot.state.Location.x
-            cur_y = robot.state.Location.y
-            cur_yaw = robot.state.Location.yaw
-            cur_loc = robot.state.Location
+            cur_x = robot.state.location.x
+            cur_y = robot.state.location.y
+            cur_yaw = robot.state.location.theta
+            cur_loc = robot.state.location
             path_request.path.append(cur_loc)
 
             disp = self.disp([target_x, target_y], [cur_x, cur_y])
@@ -240,11 +242,14 @@ class FleetManager(Node):
                     self.vehicle_traits.rotational.nominal_velocity)
             t.sec = t.sec + duration
             target_loc = Location()
-            target_loc.t = t
+            #-------------------------------------------------------------------------------------
+            #target_loc.t = t
+            #-------------------------------------------------------------------------------------
+            target_loc.level_name = target_map
             target_loc.x = target_x
             target_loc.y = target_y
-            target_loc.yaw = target_yaw
-            target_loc.level_name = target_map
+            target_loc.theta = target_yaw
+            target_loc.level_name = "L1"
             if target_speed_limit > 0:
                 target_loc.obey_approach_speed_limit = True
                 target_loc.approach_speed_limit = target_speed_limit
@@ -253,13 +258,30 @@ class FleetManager(Node):
             path_request.robot_name = robot_name
             path_request.path.append(target_loc)
             path_request.task_id = str(cmd_id)
-            self.path_pub.publish(path_request)
+            #self.path_pub.publish(path_request)
 
             if self.debug:
                 print(f'Sending navigate request for {robot_name}: {cmd_id}')
             robot.last_path_request = path_request
             robot.destination = target_loc
 
+            #---------------------------------------------------------------------------------------
+            x = int(target_x*1000)
+            y = int(target_y*1000)
+            #self.get_logger().info(f"x, y:, [{x,y,target_yaw}]")
+            #theta = int(math.degrees(['target_loc.theta']))
+            theta = int(target_loc.theta)
+            if (x < -78360 and x > -78560) and (y < 2277 and y > 2077):
+                self.send_goal(f"goto one", ["Arrived at one", "Failed going to goal "])
+            elif (x < -78360 and x > -78560) and (y < 4712 and y > 4512):
+                self.send_goal(f"goto two", ["Arrived at two", "Failed going to goal "])
+            elif (x < -79017 and x > -79217) and (y < 90 and y > -90):
+                self.send_goal(f"goto home", ["Arrived at home", "Failed going to goal "])
+            else:
+                self.send_goal(f"gotoPoint {x} {y} {theta}", ["Arrived at point ", "Failed going to goal "])
+                self.get_logger().info(f"gotoPointtttttt, [{x} {y} {theta}]")
+            #self.send_goal(f"goto goal6",["Arrived at goal6 ", "Failed going to goal "])
+            #----------------------------------------------------------------------------------------
             response['success'] = True
             return response
 
@@ -277,16 +299,27 @@ class FleetManager(Node):
             path_request.path = []
             # Appending the current location twice will effectively tell the
             # robot to stop
-            path_request.path.append(robot.state.Location)
-            path_request.path.append(robot.state.Location)
-
+            
+            #********************************************************************************************
+            # path_request.path.append(robot.state.location)
+            # path_request.path.append(robot.state.location)
+            #********************************************************************************************
             path_request.task_id = str(cmd_id)
-            self.path_pub.publish(path_request)
+            #self.path_pub.publish(path_request)
 
             if self.debug:
                 print(f'Sending stop request for {robot_name}: {cmd_id}')
             robot.last_path_request = path_request
             robot.destination = None
+
+            #********************************************************************************************
+            # req = ArclApi.Request()
+            # req.command = "stop"
+            # req.line_identifier = "Stopped"
+            # res = self.client.call(req)
+            self.send_goal(f"stop", ["Stopped", "Failed "])
+            #self.get_logger().info(f"STOP RESPONSE:, [{res}]")
+            #********************************************************************************************
 
             response['success'] = True
             return response
@@ -303,10 +336,10 @@ class FleetManager(Node):
             robot = self.robots[robot_name]
 
             path_request = PathRequest()
-            cur_loc = robot.state.Location
+            cur_loc = robot.state.location
             cur_x = cur_loc.x
             cur_y = cur_loc.y
-            cur_yaw = cur_loc.yaw
+            cur_yaw = cur_loc.theta
             previous_wp = [cur_x, cur_y, cur_yaw]
             target_loc = Location()
             path_request.path.append(cur_loc)
@@ -318,7 +351,7 @@ class FleetManager(Node):
             path_request.fleet_name = self.fleet_name
             path_request.robot_name = robot_name
             path_request.task_id = str(cmd_id)
-            self.path_pub.publish(path_request)
+            #self.path_pub.publish(path_request)
 
             if self.debug:
                 print(f'Sending process request for {robot_name}: {cmd_id}')
@@ -359,11 +392,13 @@ class FleetManager(Node):
             #     return
             #-------------------------------------------------------------------------------------
             robot.state = msg
+            #self.get_logger().info(f"robot.state:, [{msg}]")
             #-------------------------------------------------------------------------------------
             # Check if robot has reached destination
             # if robot.destination is None:
             #     return
-
+            # self.get_logger().info(f"idleeeeeee:, [{RobotMode.MODE_IDLE}]")
+            # self.get_logger().info(f"charging, [{RobotMode.MODE_CHARGING}]")
             # if (
             #     (
             #         msg.mode.mode == RobotMode.MODE_IDLE
@@ -381,6 +416,7 @@ class FleetManager(Node):
             #                 f'{completed_request}'
             #             )
             #     robot.last_completed_request = completed_request
+            
             #-------------------------------------------------------------------------------------
 
     def dock_summary_cb(self, msg):
@@ -392,14 +428,34 @@ class FleetManager(Node):
 
     def get_robot_state(self, robot: State, robot_name):
         data = {}
-        position = [robot.state.Location.x, robot.state.Location.y]
-        angle = robot.state.Location.theta
+        position = [robot.state.location.x, robot.state.location.y]
+        angle = robot.state.location.theta
         data['robot_name'] = robot_name
-        data['map_name'] = robot.state.Location.level_name
+        #-------------------------------------------------------------------------------------
+        data['map_name'] = "L1"
+        #-------------------------------------------------------------------------------------
+
         data['position'] =\
             {'x': position[0], 'y': position[1], 'theta': angle}
         data['battery'] = robot.state.state_of_charge
+        duration = format(float(robot.state.time_to_goal),".2f")
+        
+        #self.get_logger().info(f"duration0000------------------- [{duration}]")
+        
         #-------------------------------------------------------------------------------------
+        # if (robot.destination is not None
+        #         and robot.last_path_request is not None):
+        #     destination = robot.destination
+        #     cmd_id = int(robot.last_path_request.task_id)
+        #     duration = robot.state.time_to_goal
+        #     data['destination_arrival'] = {
+        #         'cmd_id': cmd_id,
+        #         'duration': duration
+        #     }
+        # else:
+        #     data['destination_arrival'] = None    
+
+
         # if (robot.destination is not None
         #         and robot.last_path_request is not None):
         #     destination = robot.destination
@@ -445,6 +501,35 @@ class FleetManager(Node):
         #     data['replan'] = False
         #-------------------------------------------------------------------------------------
         return data
+
+    def send_goal(self, command, identifier):
+        self.goal = Action.Goal()
+        self.goal.command = command
+        self.get_logger().info(f"command , [{command}]")
+        self.goal.identifier = identifier
+        self._action_client.wait_for_server()
+        self._send_goal_future = self._action_client.send_goal_async(self.goal, feedback_callback=self.feedback_callback)
+        self._send_goal_future.add_done_callback(self.goal_response_callback)
+        
+
+    def goal_response_callback(self, future):
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().info('Goal rejected :(')
+            return
+        self.get_logger().info('Goal accepted :)')
+
+        self._get_result_future = goal_handle.get_result_async()
+        self._get_result_future.add_done_callback(self.get_result_callback)
+
+    def get_result_callback(self, future):
+        result = future.result().result
+        #self.get_logger().info(result.res_msg)
+        self.previous_navigation_request_result = result.res_msg
+
+    def feedback_callback(self, feedback_msg):
+        feedback = feedback_msg.feedback.feed_msg
+        #self.get_logger().info(feedback) 
 
     def disp(self, A, B):
         return math.sqrt((A[0]-B[0])**2 + (A[1]-B[1])**2)

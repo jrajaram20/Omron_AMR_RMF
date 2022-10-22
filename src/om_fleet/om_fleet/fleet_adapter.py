@@ -18,10 +18,12 @@ import yaml
 import time
 import threading
 import datetime
+import nudged
 
 import rclpy
 import rclpy.node
 from rclpy.parameter import Parameter
+import numpy as np
 
 import rmf_adapter as adpt
 import rmf_adapter.vehicletraits as traits
@@ -97,13 +99,17 @@ def initialize_fleet(config_yaml, nav_graph_path, node, use_sim_time):
                      "RMF Schedule Node is running")
     adapter.start()
     time.sleep(1.0)
+    server_uri = None
+    # node.declare_parameter('server_uri', rclpy.Parameter.Type.STRING)
+    # server_uri = node.get_parameter(
+    #     'server_uri').get_parameter_value().string_value
+    # if server_uri == "":
+    #     server_uri = None
 
-    node.declare_parameter('server_uri', rclpy.Parameter.Type.STRING)
-    server_uri = node.get_parameter(
-        'server_uri').get_parameter_value().string_value
-    if server_uri == "":
-        server_uri = None
-
+    node.get_logger().info(f"fleetname : [{fleet_name}]")
+    node.get_logger().info(f"vehicle: [{vehicle_traits}]")#, vehicle_traits)
+    node.get_logger().info(f"navgraph: [{nav_graph}]")
+    node.get_logger().info(f"server: [{server_uri}]")
     fleet_handle = adapter.add_fleet(
         fleet_name, vehicle_traits, nav_graph, server_uri)
 
@@ -153,6 +159,28 @@ def initialize_fleet(config_yaml, nav_graph_path, node, use_sim_time):
     fleet_handle.accept_task_requests(
         partial(_task_request_check, task_capabilities))
 
+     # Transforms
+    rmf_coordinates = config_yaml['reference_coordinates']['rmf']
+    robot_coordinates = config_yaml['reference_coordinates']['robot']
+    transforms = {
+        'rmf_to_robot': nudged.estimate(rmf_coordinates, robot_coordinates),
+        'robot_to_rmf': nudged.estimate(robot_coordinates, rmf_coordinates)}
+    transforms['orientation_offset'] = \
+        transforms['rmf_to_robot'].get_rotation()
+    mse = nudged.estimate_error(transforms['rmf_to_robot'],
+                                rmf_coordinates,
+                                robot_coordinates)
+    print(f"Coordinate transformation error: {mse}")
+    print("RMF to Robot transform:")
+    print(f"    rotation:{transforms['rmf_to_robot'].get_rotation()}")
+    print(f"    scale:{transforms['rmf_to_robot'].get_scale()}")
+    print(f"    trans:{transforms['rmf_to_robot'].get_translation()}")
+    print("Robot to RMF transform:")
+    print(f"    rotation:{transforms['robot_to_rmf'].get_rotation()}")
+    print(f"    scale:{transforms['robot_to_rmf'].get_scale()}")
+    print(f"    trans:{transforms['robot_to_rmf'].get_translation()}")
+
+
     def _consider(description: dict):
         confirm = adpt.fleet_update_handle.Confirmation()
         confirm.accept()
@@ -160,7 +188,9 @@ def initialize_fleet(config_yaml, nav_graph_path, node, use_sim_time):
 
     # Configure this fleet to perform any kind of teleop action
     fleet_handle.add_performable_action("teleop", _consider)
+    
 
+    
     def _updater_inserter(cmd_handle, update_handle):
         """Insert a RobotUpdateHandle."""
         cmd_handle.update_handle = update_handle
@@ -223,7 +253,7 @@ def initialize_fleet(config_yaml, nav_graph_path, node, use_sim_time):
                     robot_config = robots_config['robot_config']
                     initial_waypoint = rmf_config['start']['waypoint']
                     if 'position' in data['data']:
-                        initial_orientation = data['data']['position']['yaw']
+                        initial_orientation = data['data']['position']['theta']
                     else:
                         initial_orientation = \
                             rmf_config['start']['orientation']
@@ -273,6 +303,7 @@ def initialize_fleet(config_yaml, nav_graph_path, node, use_sim_time):
                         node=node,
                         graph=nav_graph,
                         vehicle_traits=vehicle_traits,
+                        transforms=transforms,
                         map_name=rmf_config['start']['map_name'],
                         start=starts[0],
                         position=position,

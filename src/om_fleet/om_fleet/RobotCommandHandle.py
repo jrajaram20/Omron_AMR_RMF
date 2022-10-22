@@ -65,6 +65,7 @@ class RobotCommandHandle(adpt.RobotCommandHandle):
                  node,
                  graph,
                  vehicle_traits,
+                 transforms,
                  map_name,
                  start,
                  position,
@@ -81,6 +82,7 @@ class RobotCommandHandle(adpt.RobotCommandHandle):
         self.node = node
         self.graph = graph
         self.vehicle_traits = vehicle_traits
+        self.transforms = transforms
         self.map_name = map_name
         # Get the index of the charger waypoint
         waypoint = self.graph.find_waypoint(charger_waypoint)
@@ -118,6 +120,7 @@ class RobotCommandHandle(adpt.RobotCommandHandle):
         self.dock_waypoint_index = None
         # The graph index of the waypoint the robot starts or ends an action
         self.action_waypoint_index = None
+        self.jobheader = "rmf"
         self.current_cmd_id = 0
         self.started_action = False
 
@@ -266,6 +269,7 @@ class RobotCommandHandle(adpt.RobotCommandHandle):
             self.node.get_logger().info(f"Received new path for {self.name}")
 
             self.remaining_waypoints = self.filter_waypoints(waypoints)
+            
             assert next_arrival_estimator is not None
             assert path_finished_callback is not None
 
@@ -294,10 +298,23 @@ class RobotCommandHandle(adpt.RobotCommandHandle):
                         path_index = self.remaining_waypoints[0].index
                         # Move robot to next waypoint
                         target_pose = self.target_waypoint.position
-                        [x, y] = target_pose[:2]
-                        theta = target_pose[2]
+                        #target_pose = self.target_waypoint.position[x, y] = self.transforms["rmf_to_robot"].transform(target_pose[:2])
+                        #theta = target_pose[2] + \
+                        #    self.transforms['orientation_offset']
+                        
+                        [x, y] = self.transforms["rmf_to_robot"].transform(target_pose[:2])
+                        theta = target_pose[2]+ \
+                            self.transforms['orientation_offset']
                         speed_limit = \
                             self.get_speed_limit(self.target_waypoint)
+
+                        print(f"Requesting robot to navigate to "
+                        f"[{x:.0f},{y:.0f}, {theta:.0f}] grid coordinates and "
+                        f"[{target_pose[0]:.2f}, {target_pose[1]:.2f}, {target_pose[2]:.2f}] RMF coordinates...")
+
+                        self.node.get_logger().info(f"Requesting robot to navigate to "
+                        f"[{x:.0f},{y:.0f}, {theta:.0f}] grid coordinates and "
+                        f"[{target_pose[0]:.2f}, {target_pose[1]:.2f}, {target_pose[2]:.2f}] RMF coordinates...")
                         response = self.api.navigate(
                             self.name,
                             self.next_cmd_id(),
@@ -324,7 +341,6 @@ class RobotCommandHandle(adpt.RobotCommandHandle):
 
                         if self._quit_path_event.wait(0.1):
                             return
-
                         # Check if we have reached the target
                         with self._lock:
                             if self.api.navigation_completed(
@@ -380,6 +396,7 @@ class RobotCommandHandle(adpt.RobotCommandHandle):
 
                 if (not self.remaining_waypoints) \
                         and self.state == RobotState.IDLE:
+                    self.clear()
                     path_finished_callback()
                     self.node.get_logger().info(
                         f"Robot {self.name} has successfully navigated along "
@@ -609,7 +626,7 @@ class RobotCommandHandle(adpt.RobotCommandHandle):
 
         assert(len(wps) > 0)
         p = np.array([self.position[0], self.position[1]])
-
+        self.node.get_logger().info(f"[{len(wps)}] remaining waypointtttttt")
         waypoints = []
         for i in range(len(wps)):
             waypoints.append(PlanWaypoint(i, wps[i]))
@@ -628,6 +645,7 @@ class RobotCommandHandle(adpt.RobotCommandHandle):
             lane_length = np.linalg.norm(dp_lane)
             if lane_length < 1e-3:
                 continue
+
             n_lane = dp_lane/lane_length
             p_l = p - p0
             p_l_proj = np.dot(p_l, n_lane)

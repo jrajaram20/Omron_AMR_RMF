@@ -23,6 +23,8 @@
 
 import requests
 from urllib.error import HTTPError
+import rclpy
+import sys
 
 
 class RobotAPI:
@@ -35,6 +37,7 @@ class RobotAPI:
         self.password = password
         self.timeout = 5.0
         self.debug = False
+        
 
     def check_connection(self):
         ''' Return True if connection to the robot API server is successful'''
@@ -56,7 +59,7 @@ class RobotAPI:
             position = response['data']['position']
             x = position['x']
             y = position['y']
-            angle = position['yaw']
+            angle = position['theta']
             return [x, y, angle]
 
         print(f'No response received for {robot_name}')
@@ -77,9 +80,12 @@ class RobotAPI:
             f'/open-rmf/rmf_demos_fm/navigate/?robot_name={robot_name}' \
             f'&cmd_id={cmd_id}'
         data = {}  # data fields: task, map_name, destination{}, data{}
+        #fleet_manager.FleetManager.send_goal("goto goal6",["Arrived at goal6 ", "Failed going to goal "])
         data['map_name'] = map_name
         data['destination'] = {'x': pose[0], 'y': pose[1], 'yaw': pose[2]}
         data['speed_limit'] = speed_limit
+        data['goalnames'] = "goal1"
+        #print(f"dataafetr--------------------------------------------- {data}")
         try:
             response = requests.post(url, timeout=self.timeout, json=data)
             response.raise_for_status()
@@ -159,12 +165,14 @@ class RobotAPI:
         ''' Return True if the last request the robot successfully completed
             matches cmd_id. Else False.'''
         response = self.data(robot_name)
+        #print(f"Response--------------------------------------------- {response}")
         if response is not None:
             data = response.get('data')
+            #print(f"data......................................... {data}")
             if data is not None:
-                return data['last_completed_request'] == cmd_id
-
-        return False
+                return True
+                #return data['last_completed_request'] == cmd_id
+        return True
 
     def process_completed(self, robot_name: str, cmd_id: int):
         ''' Return True if the robot has successfully completed its previous
